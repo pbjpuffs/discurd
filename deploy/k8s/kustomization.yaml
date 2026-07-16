@@ -1,0 +1,28 @@
+# kubectl apply -k deploy/k8s
+# Before applying: set your registry/tag in `images:` below and replace
+# secret.example.yaml with real secret management (see that file's header).
+# scylla-cluster.example.yaml is intentionally NOT listed — it needs the Scylla
+# Operator installed first; apply it separately (docs/DEPLOYMENT.md §4.2).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: discurd
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.example.yaml # replace with your real secret source before production
+  - api.yaml
+  - gateway.yaml
+  - web.yaml
+  - ingress.yaml
+  - hpa.yaml
+images:
+  # Edit newName/newTag to the images you pushed (docs/DEPLOYMENT.md §4.1).
+  - name: REGISTRY/discurd-api
+    newName: registry.example.com/discurd/discurd-api
+    newTag: v1.0.0
+  - name: REGISTRY/discurd-gateway
+    newName: registry.example.com/discurd/discurd-gateway
+    newTag: v1.0.0
+  - name: REGISTRY/discurd-web
+    newName: registry.example.com/discurd/discurd-web
+    newTag: v1.0.0

@@ -1,0 +1,16 @@
+# Grafana dashboard provisioning — loads every *.json dashboard that sits
+# next to this file (mounted read-only at /etc/grafana/provisioning/dashboards).
+
+apiVersion: 1
+
+providers:
+  - name: discurd
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

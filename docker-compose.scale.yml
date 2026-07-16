@@ -1,0 +1,70 @@
+# Discurd scale-out overlay. Always used as the SECOND -f file:
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --build
+#
+# Adds two more ScyllaDB nodes (3-node cluster) and replicates the stateless
+# services. api/gateway/web publish no host ports in the main file (Traefik
+# routes to them over the docker network), so replicas cannot collide — do
+# not add host port mappings here. After the cluster is up, see
+# docs/DEPLOYMENT.md for switching the keyspace to NetworkTopologyStrategy
+# RF=3 and running a repair.
+
+volumes:
+  scylla_data2:
+  scylla_data3:
+
+services:
+  # ---------------------------------------------------------- scylla cluster
+  scylla-node2:
+    image: scylladb/scylla:6.2
+    restart: unless-stopped
+    command: --developer-mode=1 --smp 1 --memory 750M --overprovisioned 1 --seeds=scylla
+    volumes:
+      - scylla_data2:/var/lib/scylla
+    networks: [discurd]
+    depends_on:
+      scylla:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT now() FROM system.local'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  # node3 waits for node2 to be healthy — Scylla nodes must not bootstrap
+  # into the cluster concurrently.
+  scylla-node3:
+    image: scylladb/scylla:6.2
+    restart: unless-stopped
+    command: --developer-mode=1 --smp 1 --memory 750M --overprovisioned 1 --seeds=scylla
+    volumes:
+      - scylla_data3:/var/lib/scylla
+    networks: [discurd]
+    depends_on:
+      scylla:
+        condition: service_healthy
+      scylla-node2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT now() FROM system.local'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  # ---------------------------------------------------------- app replicas
+  api:
+    deploy:
+      replicas: 3
+    environment:
+      SCYLLA_HOSTS: scylla,scylla-node2,scylla-node3
+
+  gateway:
+    deploy:
+      replicas: 2
+    environment:
+      SCYLLA_HOSTS: scylla,scylla-node2,scylla-node3
+
+  web:
+    deploy:
+      replicas: 2

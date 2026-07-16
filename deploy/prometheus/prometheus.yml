@@ -1,0 +1,49 @@
+# Discurd Prometheus configuration.
+# Targets are docker-compose service names resolved via Docker's embedded DNS.
+# api/gateway use DNS A-record discovery so that every replica is scraped when
+# the docker-compose.scale.yml overlay is active (Docker DNS returns one A
+# record per replica); with a single replica this behaves exactly like a
+# static api:8080 / gateway:8080 target.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # ------------------------------------------------------------ app services
+  - job_name: api
+    dns_sd_configs:
+      - names: [api]
+        type: A
+        port: 8080
+        refresh_interval: 15s
+
+  - job_name: gateway
+    dns_sd_configs:
+      - names: [gateway]
+        type: A
+        port: 8080
+        refresh_interval: 15s
+
+  # ------------------------------------------------------------ edge
+  - job_name: traefik
+    static_configs:
+      - targets: ["traefik:8082"]
+
+  # ------------------------------------------------------------ data stores
+  - job_name: scylla
+    static_configs:
+      - targets: ["scylla:9180"]
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  - job_name: nats
+    static_configs:
+      - targets: ["nats-exporter:7777"]
+
+  # ------------------------------------------------------------ self
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

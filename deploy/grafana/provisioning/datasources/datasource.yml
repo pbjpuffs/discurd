@@ -1,0 +1,16 @@
+# Grafana datasource provisioning — Prometheus is the only datasource.
+# The dashboard binds to this datasource by uid "prometheus".
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST

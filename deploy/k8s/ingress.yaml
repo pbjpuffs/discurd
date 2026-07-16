@@ -1,0 +1,75 @@
+# Edge routing — mirrors the Traefik rules in docker-compose.yml:
+#   /api → api, /ws → gateway, /files (prefix stripped) → MinIO, / → web.
+# Requires ingress-nginx. Replace discurd.example.com with your host.
+# TLS: add a `tls:` block + cert-manager annotations as usual for your cluster.
+#
+# Two Ingress objects because the nginx rewrite-target annotation applies to a
+# whole Ingress and only /files must be prefix-stripped.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: discurd
+  namespace: discurd
+  labels:
+    app.kubernetes.io/part-of: discurd
+  annotations:
+    # WebSocket-friendly: keep /ws connections open well past nginx defaults.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Uploads go through /api (MAX_UPLOAD_MB=25 + multipart overhead).
+    nginx.ingress.kubernetes.io/proxy-body-size: "30m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: discurd.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8080
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: discurd-files
+  namespace: discurd
+  labels:
+    app.kubernetes.io/part-of: discurd
+  annotations:
+    # /files/{bucket}/{key} → MinIO /{bucket}/{key} (path-style, prefix stripped),
+    # matching Traefik's stripprefix middleware.
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: discurd.example.com
+      http:
+        paths:
+          - path: /files(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                # MinIO Helm chart installed in this namespace with
+                # fullnameOverride=minio (see deploy/k8s/README.md), or an
+                # ExternalName Service pointing at real S3.
+                name: minio
+                port:
+                  number: 9000

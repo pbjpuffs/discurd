@@ -1,0 +1,65 @@
+# Discurd web — nginx serving the built React SPA.
+# Image placeholder: set your registry/tag in kustomization.yaml (images:).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: discurd
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: discurd
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+        app.kubernetes.io/part-of: discurd
+    spec:
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: web
+          image: REGISTRY/discurd-web:TAG
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: discurd
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: discurd
+spec:
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

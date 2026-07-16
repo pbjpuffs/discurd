@@ -1,0 +1,32 @@
+# Non-secret configuration shared by api and gateway.
+# Names and defaults per docs/ARCHITECTURE.md §10. PORT and SERVICE_NAME are set
+# per-Deployment. Secrets (JWT_SECRET, MinIO credentials) live in the Secret
+# `discurd-secrets` — see secret.example.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: discurd-config
+  namespace: discurd
+  labels:
+    app.kubernetes.io/part-of: discurd
+data:
+  # Production mode: the services refuse to boot with the built-in dev JWT
+  # secret or any secret under 32 chars — set a real one in discurd-secrets.
+  ENV: "production"
+  # Scylla Operator client service for the cluster in scylla-cluster.example.yaml.
+  SCYLLA_HOSTS: "discurd-scylla-client.scylla.svc.cluster.local"
+  SCYLLA_KEYSPACE: "discurd"
+  # bitnami/redis Helm chart, release "redis", namespace "redis", standalone mode.
+  REDIS_ADDR: "redis-master.redis.svc.cluster.local:6379"
+  # nats/nats Helm chart, release "nats", namespace "nats".
+  NATS_URL: "nats://nats.nats.svc.cluster.local:4222"
+  # MinIO Helm chart installed in this namespace with fullnameOverride=minio,
+  # or an ExternalName Service pointing at real S3 (then set MINIO_USE_SSL=true).
+  MINIO_ENDPOINT: "minio:9000"
+  MINIO_USE_SSL: "false"
+  ACCESS_TOKEN_TTL: "15m"
+  REFRESH_TOKEN_TTL: "168h"
+  MAX_UPLOAD_MB: "25"
+  # Through-Ingress traffic is same-origin; list any extra dev origins here.
+  CORS_ORIGINS: "https://discurd.example.com"
+  LOG_LEVEL: "info"

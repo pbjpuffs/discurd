@@ -1,0 +1,89 @@
+# Discurd REST API — stateless, horizontally scalable (see hpa.yaml).
+# Image placeholder: set your registry/tag in kustomization.yaml (images:).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: discurd
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: discurd
+spec:
+  # No replicas here on purpose: hpa.yaml owns the replica count. Pinning it
+  # would make every `kubectl apply` reset a scaled-up fleet back to this number.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+        app.kubernetes.io/part-of: discurd
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: REGISTRY/discurd-api:TAG
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SERVICE_NAME
+              value: "api"
+            - name: PORT
+              value: "8080"
+          envFrom:
+            - configMapRef:
+                name: discurd-config
+            - secretRef:
+                name: discurd-secrets
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              # Uploads (MAX_UPLOAD_MB=25) are buffered in memory during
+              # multipart parsing, so leave headroom for a few concurrent ones.
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: discurd
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: discurd
+spec:
+  selector:
+    app.kubernetes.io/name: api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

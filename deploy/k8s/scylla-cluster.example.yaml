@@ -1,0 +1,44 @@
+# EXAMPLE — requires the Scylla Operator (https://operator.docs.scylladb.com/)
+# and its cert-manager prerequisite to be installed first. Not part of
+# kustomization.yaml; apply explicitly once the operator is running:
+#   kubectl apply -f deploy/k8s/scylla-cluster.example.yaml
+#
+# Creates a 3-member cluster whose client service is
+#   discurd-scylla-client.scylla.svc.cluster.local:9042
+# — the SCYLLA_HOSTS value in configmap.yaml. After the cluster is up, apply
+# db/schema.cql and ALTER the keyspace to NetworkTopologyStrategy {'dc1': 3}
+# (commands in docs/DEPLOYMENT.md §4.2).
+#
+# Sizing below is a modest starting point — Scylla wants dedicated cores,
+# equal requests/limits, and fast local NVMe via a suitable storageClassName.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scylla
+---
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  name: discurd-scylla
+  namespace: scylla
+spec:
+  version: 6.2.0
+  agentVersion: 3.4.0
+  developerMode: false
+  sysctls:
+    - fs.aio-max-nr=30000000
+  datacenter:
+    name: dc1
+    racks:
+      - name: rack1
+        members: 3
+        storage:
+          capacity: 100Gi
+          # storageClassName: local-nvme   # use a fast local-SSD storage class
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+          limits:
+            cpu: 2
+            memory: 8Gi
