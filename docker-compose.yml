@@ -26,6 +26,10 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
+      # websecure is defined here so routers can attach to it; :443 is only
+      # published (and http->https redirect enabled) by docker-compose.prod.yml.
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls=true
       - --entrypoints.metrics.address=:8082
       - --metrics.prometheus=true
       - --metrics.prometheus.entrypoint=metrics
@@ -118,7 +122,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.files.rule=PathPrefix(`/files`)
-      - traefik.http.routers.files.entrypoints=web
+      - traefik.http.routers.files.entrypoints=web,websecure
       - traefik.http.routers.files.middlewares=files-strip,files-safe
       - traefik.http.middlewares.files-strip.stripprefix.prefixes=/files
       # User content is served from the app's own origin, so force every object
@@ -172,7 +176,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.livekit.rule=PathPrefix(`/livekit`)
-      - traefik.http.routers.livekit.entrypoints=web
+      - traefik.http.routers.livekit.entrypoints=web,websecure
       - traefik.http.routers.livekit.middlewares=livekit-strip
       - traefik.http.middlewares.livekit-strip.stripprefix.prefixes=/livekit
       - traefik.http.services.livekit.loadbalancer.server.port=7880
@@ -223,7 +227,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.api.rule=PathPrefix(`/api`)
-      - traefik.http.routers.api.entrypoints=web
+      - traefik.http.routers.api.entrypoints=web,websecure
       - traefik.http.services.api.loadbalancer.server.port=8080
 
   gateway:
@@ -258,7 +262,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.gateway.rule=PathPrefix(`/ws`)
-      - traefik.http.routers.gateway.entrypoints=web
+      - traefik.http.routers.gateway.entrypoints=web,websecure
       - traefik.http.services.gateway.loadbalancer.server.port=8080
 
   web:
@@ -273,7 +277,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.web.rule=PathPrefix(`/`)
       - traefik.http.routers.web.priority=1
-      - traefik.http.routers.web.entrypoints=web
+      - traefik.http.routers.web.entrypoints=web,websecure
       - traefik.http.services.web.loadbalancer.server.port=80
 
   # ---------------------------------------------------------------- observability

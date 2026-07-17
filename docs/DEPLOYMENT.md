@@ -385,3 +385,71 @@ HPAs scale api (3→12) and gateway (2→10) at 70% CPU — `metrics-server` req
 Prometheus in-cluster: the pods carry `prometheus.io/*` scrape annotations; wire your
 Prometheus (e.g. kube-prometheus-stack) to honor them and reuse the dashboard from
 `deploy/grafana/`.
+
+## 5. CI/CD with GitHub Actions (single-server deploy by IP)
+
+Three workflows live in `.github/workflows/`:
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| `ci.yml` | every push / PR | `go vet · build · test`, `npm ci · build`, `docker compose config` on all overlays |
+| `release.yml` | push to `main` (+ manual) | builds & pushes `discurd-api` / `-gateway` / `-web` images to **GHCR** (`ghcr.io/<owner>/discurd-*`), tagged `latest` + commit SHA. Uses the built-in `GITHUB_TOKEN` — no secrets to set |
+| `deploy.yml` | **manual** (Actions → Deploy → Run workflow) | SSHes to your server, installs Docker if missing, syncs the compose files + `db/` + `deploy/`, writes a production `.env`, `docker compose pull && up -d --wait`, verifies `/readyz` |
+
+`deploy.yml` runs the **production overlay** `docker-compose.prod.yml`: it runs the prebuilt
+GHCR images (no building on the server) and puts Traefik on **HTTPS (:443) with its built-in
+self-signed certificate**, redirecting `:80 → :443`. That self-signed cert makes the origin a
+*secure context*, which is what lets browsers grant camera/mic for voice/video on a bare IP —
+visitors accept a one-time "not private" warning. **Assign a domain later** and switch to a
+trusted Let's Encrypt cert by adding an ACME resolver to Traefik (see §3.2) — a one-time
+`docker-compose.prod.yml` edit; nothing else changes.
+
+### 5.1 Secrets & variables to set (repo → Settings → Secrets and variables → Actions)
+
+**Secrets** (Settings → *Secrets*):
+
+| Name | Value |
+|------|-------|
+| `DEPLOY_SSH_HOST` | server IP (or hostname) |
+| `DEPLOY_SSH_USER` | SSH login (e.g. `root` or `ubuntu`) |
+| `DEPLOY_SSH_KEY` | the **private** SSH key (full PEM) whose public half is in the server's `~/.ssh/authorized_keys` |
+| `JWT_SECRET` | strong random string, ≥32 chars (`openssl rand -hex 32`) |
+| `LIVEKIT_API_SECRET` | strong random string, ≥32 chars |
+| `MINIO_ROOT_PASSWORD` | MinIO password |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password |
+
+**Variables** (Settings → *Variables* — non-secret; all optional, sensible defaults shown):
+
+| Name | Default | Notes |
+|------|---------|-------|
+| `LIVEKIT_NODE_IP` | falls back to `DEPLOY_SSH_HOST` | the **public IP** LiveKit advertises for media (set explicitly if the SSH host differs from the media-reachable IP) |
+| `DEPLOY_SSH_PORT` | `22` | |
+| `LIVEKIT_API_KEY` | `devkey` | |
+| `MINIO_ROOT_USER` | `minioadmin` | |
+| `GRAFANA_ADMIN_USER` | `admin` | |
+
+The deploy never prints secret values (GitHub masks them); the `.env` is written on the server
+under `/opt/discurd/.env`.
+
+### 5.2 Server prerequisites
+
+- A Linux box (Ubuntu/Debian easiest) reachable at `DEPLOY_SSH_HOST`.
+- The SSH user must be `root` **or** have **passwordless `sudo`** (cloud images like `ubuntu@…`
+  do by default) — the workflow uses `sudo` for Docker when not root and can install Docker via
+  `get.docker.com` on first run.
+- Open inbound ports: **80** and **443** (app + redirect), **7881/tcp** and **7882/udp** (LiveKit
+  media). Optional: 3000/9090/9001/8090 if you want Grafana/Prometheus/MinIO/Traefik dashboards
+  reachable — otherwise leave them closed and reach them via SSH tunnel.
+- GHCR images are **private** by default; the deploy logs the server into GHCR with the run's
+  `GITHUB_TOKEN` to pull. (Alternatively make the three packages public and skip that.)
+
+### 5.3 First deploy
+
+1. Set the secrets/variables above.
+2. Push to `main` (or run **Build & Publish Images** manually) so the GHCR images exist.
+3. Actions → **Deploy** → *Run workflow*. It provisions, pulls, and starts everything, then
+   verifies `/readyz`.
+4. Open `https://<server-ip>`, accept the one-time certificate warning, register, and create a
+   **voice** channel to test audio/video.
+5. Seed demo data (optional):
+   `ssh <user>@<host> 'cd /opt/discurd && sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm --entrypoint /app/seed api'`

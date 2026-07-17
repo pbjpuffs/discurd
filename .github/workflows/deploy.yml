@@ -1,0 +1,119 @@
+name: Deploy
+
+# Manual only: run this from the Actions tab AFTER setting the secrets/variables
+# listed in docs/DEPLOYMENT.md. It never runs automatically, so pushing the
+# workflow files can't fail-deploy before you've configured anything.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (from GHCR)"
+        default: latest
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+      SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+      SSH_PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Write production .env
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          LIVEKIT_API_KEY: ${{ vars.LIVEKIT_API_KEY }}
+          MINIO_ROOT_USER: ${{ vars.MINIO_ROOT_USER }}
+          GRAFANA_ADMIN_USER: ${{ vars.GRAFANA_ADMIN_USER }}
+          NODE_IP: ${{ vars.LIVEKIT_NODE_IP }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          cat > deploy.env <<EOF
+          ENV=production
+          IMAGE_TAG=${IMAGE_TAG:-latest}
+          JWT_SECRET=${JWT_SECRET}
+          LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+          LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+          LIVEKIT_NODE_IP=${NODE_IP:-$SSH_HOST}
+          MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+          MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+          GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+          GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+          EOF
+
+      - name: Bootstrap Docker + directory on the server
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+          if ! command -v docker >/dev/null 2>&1; then
+            curl -fsSL https://get.docker.com | $SUDO sh
+          fi
+          $SUDO mkdir -p /opt/discurd
+          $SUDO chown "$(id -un):$(id -gn)" /opt/discurd
+          REMOTE
+
+      - name: Sync compose + config to the server
+        run: |
+          RSH="ssh -i $HOME/.ssh/deploy_key -p $SSH_PORT -o StrictHostKeyChecking=accept-new"
+          rsync -az --delete -e "$RSH" \
+            docker-compose.yml docker-compose.prod.yml db deploy \
+            "$SSH_USER@$SSH_HOST:/opt/discurd/"
+          scp -i "$HOME/.ssh/deploy_key" -P "$SSH_PORT" -o StrictHostKeyChecking=accept-new \
+            deploy.env "$SSH_USER@$SSH_HOST:/opt/discurd/.env"
+
+      - name: Pull images & roll out
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" GH_TOKEN="$GH_TOKEN" GH_ACTOR="$GH_ACTOR" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+          cd /opt/discurd
+          echo "$GH_TOKEN" | $SUDO docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          FILES="-f docker-compose.yml -f docker-compose.prod.yml"
+          $SUDO docker compose $FILES pull
+          $SUDO docker compose $FILES up -d --no-build --remove-orphans --wait --wait-timeout 360
+          $SUDO docker image prune -f
+          $SUDO docker logout ghcr.io || true
+          echo "--- deployed services ---"
+          $SUDO docker compose $FILES ps
+          REMOTE
+
+      - name: Verify readiness
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+          cd /opt/discurd
+          FILES="-f docker-compose.yml -f docker-compose.prod.yml"
+          $SUDO docker compose $FILES exec -T api wget -qO- http://localhost:8080/readyz | grep -q ready
+          $SUDO docker compose $FILES exec -T gateway wget -qO- http://localhost:8080/readyz | grep -q ready
+          echo "api + gateway are ready"
+          REMOTE
