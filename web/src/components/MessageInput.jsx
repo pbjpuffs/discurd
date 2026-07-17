@@ -118,6 +118,8 @@ export default function MessageInput({ channelId, guildId, channelName }) {
 
   return (
     <div className="message-input-area" ref={areaRef}>
+      {/* Dim backdrop behind the bottom-sheet popovers on mobile (hidden on desktop). */}
+      {openPanel && <div className="sheet-backdrop" onMouseDown={() => setOpenPanel(null)} />}
       {openPanel === 'emoji' && (
         <div className="composer-pop emoji">
           <EmojiPicker onPick={insertEmoji} />

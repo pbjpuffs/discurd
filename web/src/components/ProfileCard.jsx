@@ -88,6 +88,8 @@ export default function ProfileCard() {
 
   return (
     <>
+      {/* Dim backdrop shown only when the card renders as a bottom sheet (mobile). */}
+      <div className="sheet-backdrop profile-backdrop" onMouseDown={closeCard} />
       <div className="profile-card" ref={cardRef} style={{ left: pos.left, top: pos.top, width: CARD_W }}>
         <div className="profile-banner" style={{ background: accent }} />
         <div className="profile-avatar-wrap">

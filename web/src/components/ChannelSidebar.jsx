@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useChatStore } from '../store/chatStore'
 import { useAuthStore } from '../store/authStore'
 import { useVoiceStore } from '../store/voiceStore'
+import { useUiStore } from '../store/uiStore'
 import { ChevronDownIcon, CloseIcon, PlusIcon, VolumeIcon, MicOffIcon } from './Icons'
 import Avatar from './Avatar'
 import InviteModal from './InviteModal'
@@ -39,6 +40,7 @@ export default function ChannelSidebar() {
   const openTextChannel = (id) => {
     setViewingText()
     selectChannel(id)
+    useUiStore.getState().closeNav() // dismiss the mobile nav drawer on selection
   }
 
   return (
@@ -139,7 +141,10 @@ function VoiceChannelItem({ channel, guildId }) {
     <div className="voice-channel">
       <button
         className={`channel-item voice ${active ? 'active' : ''} ${inHere ? 'joined' : ''}`}
-        onClick={() => join(channel.id, guildId)}
+        onClick={() => {
+          join(channel.id, guildId)
+          useUiStore.getState().closeNav()
+        }}
       >
         <span className="hash">
           <VolumeIcon size={18} />

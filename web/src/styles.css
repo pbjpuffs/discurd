@@ -53,6 +53,9 @@ button {
   background: none;
   border: none;
   cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 input,
@@ -262,6 +265,7 @@ a:hover {
 .app-shell {
   display: flex;
   height: 100vh;
+  height: 100dvh; /* dynamic viewport unit so mobile browser chrome never clips the composer */
   position: relative;
 }
 
@@ -1950,6 +1954,7 @@ a:hover {
   inset: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   pointer-events: none;
   z-index: 9000;
 }
@@ -2013,5 +2018,432 @@ a:hover {
   }
   .lightning-fab:hover {
     transform: none;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE / MOBILE
+   Desktop layout is untouched: the mobile chrome (top bar, drawers,
+   backdrops, bottom sheets) is hidden by default and the drawer
+   wrappers collapse to `display: contents` so the guild rail / channel
+   sidebar / member list lay out as normal static columns. Everything
+   below the ≤768px breakpoint is an additive override.
+   ============================================================ */
+
+/* --- default (desktop): hide mobile-only chrome, dissolve drawer wrappers --- */
+.mobile-top-bar {
+  display: none;
+}
+.nav-drawer,
+.members-drawer {
+  display: contents;
+}
+.drawer-backdrop,
+.sheet-backdrop {
+  display: none;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* momentum scrolling on touch surfaces (harmless on desktop) */
+.channel-list,
+.member-list,
+.guild-rail,
+.messages-scroll,
+.voice-stage-body,
+.modal,
+.gif-grid,
+.profile-card,
+.composer-pop,
+.dropdown {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---------- phones & small tablets ---------- */
+@media (max-width: 768px) {
+  /* single-column shell: top bar + message pane; drawers overlay */
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .reconnect-bar {
+    top: env(safe-area-inset-top);
+  }
+
+  /* --- mobile top app bar --- */
+  .mobile-top-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    height: calc(48px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 6px 0;
+    background: var(--bg-chat);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.24);
+    z-index: 20;
+  }
+  .topbar-btn {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+  .icon-btn.topbar-btn {
+    border-radius: 6px;
+    color: var(--text-normal);
+  }
+  .icon-btn.topbar-btn:hover {
+    background: var(--bg-hover);
+  }
+  .topbar-title {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+  .topbar-hash {
+    display: inline-flex;
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+  .topbar-name {
+    font-weight: 700;
+    color: var(--header-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* the top bar is the mobile header — drop the desktop channel header */
+  .channel-header {
+    display: none;
+  }
+
+  .message-pane,
+  .voice-stage {
+    min-height: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* --- left nav drawer: guild rail + channel sidebar --- */
+  .nav-drawer {
+    display: flex;
+    flex-direction: row;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(340px, calc(100% - 40px));
+    z-index: 310;
+    background: var(--bg-rail);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: var(--shadow-high);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    will-change: transform;
+  }
+  .nav-drawer.open {
+    transform: translateX(0);
+  }
+  .nav-drawer .channel-sidebar {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  /* --- right member drawer --- */
+  .members-drawer {
+    display: block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: min(280px, 80vw);
+    z-index: 310;
+    background: var(--bg-sidebar);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: var(--shadow-high);
+    transform: translateX(100%);
+    transition: transform 0.22s ease;
+    will-change: transform;
+  }
+  .members-drawer.open {
+    transform: translateX(0);
+  }
+  .members-drawer .member-list {
+    width: 100%;
+    height: 100%;
+  }
+
+  .drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 300;
+    animation: backdrop-fade 0.2s ease;
+  }
+
+  /* --- larger tap targets --- */
+  .icon-btn.composer-tool,
+  .icon-btn.attach {
+    width: 40px;
+    height: 40px;
+  }
+  .channel-item {
+    padding: 9px 8px;
+  }
+  .member-row {
+    padding: 8px;
+  }
+  .action-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* message action buttons can't be hovered on touch: always show them */
+  .message-actions {
+    display: flex;
+  }
+
+  /* --- composer: sit above the safe area, tools may wrap --- */
+  .message-input-area {
+    padding: 0 8px;
+  }
+  .message-input {
+    flex-wrap: wrap;
+  }
+  .composer-tools {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .typing-bar {
+    padding: 0 12px;
+  }
+
+  /* prevent iOS auto-zoom: form controls must be ≥16px */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /* --- ⚡ FAB: lift above the composer, respect the safe area --- */
+  .lightning-fab {
+    right: 12px;
+    bottom: calc(env(safe-area-inset-bottom) + 92px);
+    width: 46px;
+    height: 46px;
+    z-index: 100;
+  }
+
+  /* --- composer popovers become bottom sheets --- */
+  .composer-pop {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-width: 100%;
+    z-index: 340;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-floating);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+    max-height: 72dvh;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up 0.24s ease;
+  }
+  /* drag-handle affordance */
+  .composer-pop::before {
+    content: '';
+    flex-shrink: 0;
+    width: 40px;
+    height: 4px;
+    margin: 8px auto;
+    border-radius: 2px;
+    background: var(--text-faint);
+  }
+  .composer-pop.emoji {
+    align-items: center;
+  }
+  .composer-pop.emoji .emoji-picker-pop {
+    max-width: 100%;
+  }
+  .emoji-picker-pop em-emoji-picker {
+    max-width: 100%;
+  }
+  .composer-pop.gif .gif-picker-pop {
+    width: 100%;
+    max-width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .composer-pop.gif .gif-grid {
+    height: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .composer-pop.fx.effects-menu {
+    width: 100%;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  /* reaction emoji picker → bottom sheet */
+  .reaction-emoji-pop {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-width: 100%;
+    z-index: 340;
+    display: flex;
+    justify-content: center;
+    background: var(--bg-floating);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+    padding: 14px 0 env(safe-area-inset-bottom);
+    animation: sheet-up 0.24s ease;
+  }
+
+  /* shared dim backdrop behind the bottom sheets */
+  .sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 330;
+    animation: backdrop-fade 0.2s ease;
+  }
+
+  /* --- profile card → bottom sheet --- */
+  .profile-card {
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: 100%;
+    max-height: 82dvh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    z-index: 340;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up 0.24s ease;
+  }
+  .profile-card::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.5);
+    z-index: 2;
+  }
+
+  /* --- modals → bottom sheets --- */
+  .modal-overlay {
+    align-items: flex-end;
+    z-index: 360;
+  }
+  .modal {
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 92dvh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up 0.24s ease;
+  }
+  .modal::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 2px;
+    background: var(--text-faint);
+  }
+
+  /* --- auth pages --- */
+  .auth-page {
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+  .auth-card {
+    max-width: 100%;
+    padding: 24px 20px;
+  }
+
+  /* --- voice stage --- */
+  .voice-stage-body {
+    padding: 12px;
+  }
+  .voice-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .voice-grid[data-count='1'] {
+    grid-template-columns: 1fr;
+  }
+  .voice-controls {
+    flex-wrap: wrap;
+  }
+  .voice-ctl {
+    height: 40px;
+    flex: 1 1 44px;
+    min-width: 44px;
+  }
+}
+
+/* ---------- narrow phones ---------- */
+@media (max-width: 480px) {
+  .voice-grid {
+    grid-template-columns: 1fr;
+  }
+  .nav-drawer {
+    width: calc(100% - 40px);
+  }
+}
+
+/* respect reduced-motion for the drawer/sheet transitions */
+@media (prefers-reduced-motion: reduce) {
+  .nav-drawer,
+  .members-drawer,
+  .drawer-backdrop,
+  .sheet-backdrop,
+  .composer-pop,
+  .reaction-emoji-pop,
+  .profile-card,
+  .modal {
+    transition: none !important;
+    animation: none !important;
   }
 }

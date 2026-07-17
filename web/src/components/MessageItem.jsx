@@ -174,7 +174,12 @@ export default function MessageItem({ msg, grouped, guildOwnerId, channelId }) {
               <button className="action-btn" title="Add Reaction" onClick={() => setReactOpen((v) => !v)}>
                 <SmileIcon size={16} />
               </button>
-              {reactOpen && <EmojiPicker className="reaction-emoji-pop" onPick={onPickReaction} />}
+              {reactOpen && (
+                <>
+                  <div className="sheet-backdrop" onMouseDown={() => setReactOpen(false)} />
+                  <EmojiPicker className="reaction-emoji-pop" onPick={onPickReaction} />
+                </>
+              )}
             </div>
           )}
           {canEdit && (

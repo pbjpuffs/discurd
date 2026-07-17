@@ -284,7 +284,8 @@ Let's Encrypt once a domain is assigned). See docs/DEPLOYMENT.md.
 | `LIVEKIT_API_SECRET` | — (≥32 chars) | api |
 | `LIVEKIT_WS_URL` | `ws://localhost/livekit` | api (hint returned to clients; the web app derives its own from `window.location`) |
 | `LIVEKIT_NODE_IP` | `127.0.0.1` | compose-level — the IP LiveKit advertises in ICE candidates (set to the server's public IP on deploy) |
-| `TENOR_API_KEY` | `` (empty) | api — enables the GIF picker (docs/FEATURES-v2.md) |
+| `GIPHY_API_KEY` | `` (empty) | api — enables the GIF picker (preferred; key from developers.giphy.com) |
+| `TENOR_API_KEY` | `` (empty) | api — GIF fallback (Tenor, Google-Cloud-gated key) |
 | `TENOR_CLIENT_KEY` | `discurd` | api |
 | `JWT_SECRET` | — (required) | both |
 | `ACCESS_TOKEN_TTL` | `15m` | api |

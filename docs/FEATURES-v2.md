@@ -57,7 +57,9 @@ message, may run concurrently) and aggregate to `[{emoji,count,me}]` sorted by f
 
 ## 5. Config / env
 
-- `TENOR_API_KEY` (default "") and `TENOR_CLIENT_KEY` (default "discurd") — api service.
+- `GIPHY_API_KEY` (default "", preferred), `TENOR_API_KEY` (default "", fallback),
+  `TENOR_CLIENT_KEY` (default "discurd") — api service. The GIF proxy uses Giphy when its
+  key is set, else Tenor, else returns 502 so the client hides the GIF button.
 - Attachment URL validation: in addition to `/files/attachments/{channel_id}/…`, ALSO allow
   external GIF URLs from these hosts (https only): `media.tenor.com`, `c.tenor.com`,
   `*.tenor.com`, `media.giphy.com`, `*.giphy.com` — but ONLY when `content_type == "image/gif"`.
