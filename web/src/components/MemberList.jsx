@@ -1,4 +1,5 @@
 import { useChatStore } from '../store/chatStore'
+import { openProfileFromEvent } from '../store/profileStore'
 import Avatar from './Avatar'
 import { CrownIcon } from './Icons'
 
@@ -27,7 +28,11 @@ function MemberGroup({ label, members, offline = false }) {
     <div className="member-group">
       <div className="member-group-label">{label}</div>
       {members.map((m) => (
-        <div key={m.user_id} className={`member-row ${offline ? 'offline' : ''}`}>
+        <div
+          key={m.user_id}
+          className={`member-row clickable ${offline ? 'offline' : ''}`}
+          onClick={(e) => openProfileFromEvent(e, m.user_id)}
+        >
           <span className="member-avatar">
             <Avatar name={m.username} url={m.avatar_url} size={32} />
             <span className={`presence-dot ${m.status === 'online' ? 'online' : 'off'}`} />

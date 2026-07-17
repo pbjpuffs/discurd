@@ -135,6 +135,73 @@ func TestValidateMessageContent(t *testing.T) {
 	}
 }
 
+func TestValidateBio(t *testing.T) {
+	if err := ValidateBio(""); err != nil {
+		t.Errorf("empty bio rejected: %v", err)
+	}
+	if err := ValidateBio(strings.Repeat("b", 190)); err != nil {
+		t.Errorf("190-char bio rejected: %v", err)
+	}
+	if err := ValidateBio(strings.Repeat("b", 191)); err == nil {
+		t.Error("191-char bio accepted")
+	}
+	// Rune-counted, not byte-counted: 190 multibyte runes must pass.
+	if err := ValidateBio(strings.Repeat("é", 190)); err != nil {
+		t.Errorf("190 multibyte runes rejected: %v", err)
+	}
+}
+
+func TestValidatePronouns(t *testing.T) {
+	if err := ValidatePronouns(""); err != nil {
+		t.Errorf("empty pronouns rejected: %v", err)
+	}
+	if err := ValidatePronouns(strings.Repeat("p", 40)); err != nil {
+		t.Errorf("40-char pronouns rejected: %v", err)
+	}
+	if err := ValidatePronouns(strings.Repeat("p", 41)); err == nil {
+		t.Error("41-char pronouns accepted")
+	}
+}
+
+func TestValidateAccentColor(t *testing.T) {
+	for _, c := range []string{"", "#000000", "#FFFFFF", "#a1b2c3", "#A1B2C3"} {
+		if err := ValidateAccentColor(c); err != nil {
+			t.Errorf("ValidateAccentColor(%q) unexpectedly failed: %v", c, err)
+		}
+	}
+	for _, c := range []string{"000000", "#fff", "#12345", "#1234567", "#gggggg", "red", "#12 456"} {
+		if err := ValidateAccentColor(c); err == nil {
+			t.Errorf("ValidateAccentColor(%q) unexpectedly passed", c)
+		}
+	}
+}
+
+func TestValidateEmoji(t *testing.T) {
+	for _, e := range []string{"🔥", ":fire:", "a", strings.Repeat("x", 32)} {
+		if err := ValidateEmoji(e); err != nil {
+			t.Errorf("ValidateEmoji(%q) unexpectedly failed: %v", e, err)
+		}
+	}
+	for _, e := range []string{"", " ", "   ", "\t", strings.Repeat("x", 33)} {
+		if err := ValidateEmoji(e); err == nil {
+			t.Errorf("ValidateEmoji(%q) unexpectedly passed", e)
+		}
+	}
+}
+
+func TestValidateEffectType(t *testing.T) {
+	for _, tp := range []string{"lightning", "confetti", "hearts", "snow", "rain"} {
+		if err := ValidateEffectType(tp); err != nil {
+			t.Errorf("ValidateEffectType(%q) unexpectedly failed: %v", tp, err)
+		}
+	}
+	for _, tp := range []string{"", "Lightning", "thunder", "sparkle", "rain "} {
+		if err := ValidateEffectType(tp); err == nil {
+			t.Errorf("ValidateEffectType(%q) unexpectedly passed", tp)
+		}
+	}
+}
+
 func TestSanitizeFilename(t *testing.T) {
 	cases := []struct {
 		in   string

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useChatStore } from '../store/chatStore'
 import { useVoiceStore } from '../store/voiceStore'
+import { useEffectsStore } from '../store/effectsStore'
 import { connectGateway, disconnectGateway } from '../lib/gateway'
 import { toast } from '../store/toastStore'
 import GuildRail from '../components/GuildRail'
@@ -9,6 +10,9 @@ import MessagePane from '../components/MessagePane'
 import VoiceStage from '../components/VoiceStage'
 import MemberList from '../components/MemberList'
 import AddGuildModal from '../components/AddGuildModal'
+import EffectsOverlay from '../components/EffectsOverlay'
+import LightningButton from '../components/LightningButton'
+import ProfileCard from '../components/ProfileCard'
 
 export default function AppShell() {
   const guildsLoaded = useChatStore((s) => s.guildsLoaded)
@@ -24,9 +28,28 @@ export default function AppShell() {
     return () => disconnectGateway()
   }, [loadGuilds])
 
+  // Global keyboard shortcut: Alt+L strikes (and broadcasts) lightning. Chosen
+  // to avoid clobbering browser essentials (Ctrl/Cmd+L is the address bar).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'l' || e.key === 'L')) {
+        const t = e.target
+        const tag = t && t.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return
+        e.preventDefault()
+        useEffectsStore.getState().trigger('lightning')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
     <div className="app-shell">
       {guildsLoaded && !wsConnected && <div className="reconnect-bar">Connecting…</div>}
+      <EffectsOverlay />
+      <ProfileCard />
+      <LightningButton />
       <GuildRail />
       {guildsLoaded && !hasGuilds ? (
         <div className="no-guilds">

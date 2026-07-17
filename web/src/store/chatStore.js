@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../lib/api'
 import { useAuthStore } from './authStore'
+import { useEffectsStore } from './effectsStore'
 import { toast } from './toastStore'
 
 const PAGE_SIZE = 50
@@ -177,6 +178,7 @@ export const useChatStore = create((set, get) => ({
         size: f.size,
         content_type: f.type || 'application/octet-stream',
       })),
+      reactions: [],
       created_at: new Date().toISOString(),
       edited_at: null,
       optimistic: true,
@@ -214,6 +216,122 @@ export const useChatStore = create((set, get) => ({
 
   dismissLocal: (channelId, id) =>
     set((s) => withConv(s, channelId, (cur) => ({ items: cur.items.filter((m) => m.id !== id) }))),
+
+  // Send a picked GIF as an external image/gif attachment (no upload — the URL
+  // is a Tenor/Giphy media URL). Reuses the optimistic + resolve machinery.
+  sendGif: async (channelId, guildId, gif) => {
+    const user = useAuthStore.getState().user
+    const attachment = { url: gif.url, filename: 'gif', size: 0, content_type: 'image/gif' }
+    const tempId = `pending-${Date.now()}-${++tempCounter}`
+    const optimistic = {
+      id: tempId,
+      channel_id: channelId,
+      guild_id: guildId,
+      author: { id: user.id, username: user.username, avatar_url: user.avatar_url || '' },
+      content: '',
+      attachments: [attachment],
+      reactions: [],
+      created_at: new Date().toISOString(),
+      edited_at: null,
+      optimistic: true,
+    }
+    set((s) => withConv(s, channelId, (cur) => ({ items: [...cur.items, optimistic] })))
+    try {
+      const msg = await api.post(`/channels/${channelId}/messages`, { content: '', attachments: [attachment] })
+      get().resolveOptimistic(channelId, tempId, msg)
+    } catch (e) {
+      set((s) =>
+        withConv(s, channelId, (cur) => ({
+          items: cur.items.map((m) => (m.id === tempId ? { ...m, failed: true } : m)),
+        })),
+      )
+      toast(e.message)
+    }
+  },
+
+  // ---- reactions ----
+
+  // Optimistically toggle the current user's reaction, then PUT/DELETE. The
+  // server echo (MESSAGE_REACTION_ADD/REMOVE) is applied idempotently, so it
+  // won't double-count our own action.
+  toggleReaction: async (channelId, messageId, emoji) => {
+    const me = useAuthStore.getState().user
+    if (!me || !emoji) return
+    const conv = get().messagesByChannel[channelId]
+    const msg = conv && conv.items.find((m) => m.id === messageId)
+    if (!msg || msg.optimistic) return
+    const existing = (msg.reactions || []).find((r) => r.emoji === emoji)
+    const hadMe = !!(existing && existing.me)
+    const evt = { channel_id: channelId, message_id: messageId, emoji, user_id: me.id }
+    if (hadMe) get().applyReactionRemove(evt)
+    else get().applyReactionAdd(evt)
+    const enc = encodeURIComponent(emoji)
+    try {
+      if (hadMe) await api.del(`/channels/${channelId}/messages/${messageId}/reactions/${enc}`)
+      else await api.put(`/channels/${channelId}/messages/${messageId}/reactions/${enc}`)
+    } catch (e) {
+      // revert the optimistic change
+      if (hadMe) get().applyReactionAdd(evt)
+      else get().applyReactionRemove(evt)
+      toast(e.message)
+    }
+  },
+
+  applyReactionAdd: ({ channel_id, message_id, emoji, user_id }) =>
+    set((s) => {
+      const me = useAuthStore.getState().user
+      const isMe = !!(me && user_id === me.id)
+      return withConv(s, channel_id, (cur) => ({
+        items: cur.items.map((m) => {
+          if (m.id !== message_id) return m
+          const reactions = (m.reactions || []).slice()
+          const idx = reactions.findIndex((r) => r.emoji === emoji)
+          if (idx === -1) {
+            reactions.push({ emoji, count: 1, me: isMe, users: [user_id] })
+          } else {
+            const r = reactions[idx]
+            if (isMe) {
+              if (r.me) return m // already counted ours — idempotent
+              reactions[idx] = { ...r, count: r.count + 1, me: true, users: [...(r.users || []), user_id] }
+            } else {
+              const users = r.users || []
+              if (users.includes(user_id)) return m // idempotent
+              reactions[idx] = { ...r, count: r.count + 1, me: r.me, users: [...users, user_id] }
+            }
+          }
+          return { ...m, reactions }
+        }),
+      }))
+    }),
+
+  applyReactionRemove: ({ channel_id, message_id, emoji, user_id }) =>
+    set((s) => {
+      const me = useAuthStore.getState().user
+      const isMe = !!(me && user_id === me.id)
+      return withConv(s, channel_id, (cur) => ({
+        items: cur.items.map((m) => {
+          if (m.id !== message_id) return m
+          const reactions = (m.reactions || [])
+          const idx = reactions.findIndex((r) => r.emoji === emoji)
+          if (idx === -1) return m
+          const r = reactions[idx]
+          const users = r.users || []
+          if (isMe) {
+            if (!r.me) return m // already removed ours — idempotent
+          } else if (users.length && !users.includes(user_id)) {
+            return m // idempotent
+          }
+          const nextCount = r.count - 1
+          const next = reactions.slice()
+          if (nextCount <= 0) {
+            next.splice(idx, 1)
+          } else {
+            next[idx] = { ...r, count: nextCount, me: isMe ? false : r.me, users: users.filter((u) => u !== user_id) }
+          }
+          return { ...m, reactions: next }
+        }),
+      }))
+    }),
 
   editMessage: async (channelId, messageId, content) => {
     const msg = await api.patch(`/channels/${channelId}/messages/${messageId}`, { content })
@@ -283,6 +401,21 @@ export const useChatStore = create((set, get) => ({
       case 'GUILD_MEMBER_ADD':
         get().applyMemberAdd(d)
         break
+      case 'MESSAGE_REACTION_ADD':
+        get().applyReactionAdd(d)
+        break
+      case 'MESSAGE_REACTION_REMOVE':
+        get().applyReactionRemove(d)
+        break
+      case 'EFFECT': {
+        const me = useAuthStore.getState().user
+        // We already played our own effect locally on trigger — skip the echo.
+        if (me && d.user_id === me.id) break
+        // Only play effects for the guild the user is currently viewing.
+        if (d.guild_id && d.guild_id !== get().selectedGuildId) break
+        useEffectsStore.getState().playLocal(d.type)
+        break
+      }
       default:
         break
     }

@@ -3,8 +3,10 @@ package httpapi
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -44,7 +46,8 @@ func (s *Server) channelContext(w http.ResponseWriter, r *http.Request) (store.C
 }
 
 // hydrateMessages converts records to API messages with authors batch-fetched
-// (one IN query per distinct author max, fronted by the TTL cache).
+// (one IN query per distinct author max, fronted by the TTL cache) and each
+// message's reactions aggregated for the requesting user.
 func (s *Server) hydrateMessages(r *http.Request, channel store.ChannelRecord, recs []store.MessageRecord) ([]models.Message, error) {
 	distinct := make([]gocql.UUID, 0, 8)
 	seen := make(map[gocql.UUID]bool, 8)
@@ -59,11 +62,56 @@ func (s *Server) hydrateMessages(r *http.Request, channel store.ChannelRecord, r
 		return nil, err
 	}
 
-	out := make([]models.Message, 0, len(recs))
-	for _, m := range recs {
-		out = append(out, messageModel(channel, m, authors[m.AuthorID]))
+	out := make([]models.Message, len(recs))
+	for i, m := range recs {
+		out[i] = messageModel(channel, m, authors[m.AuthorID])
+	}
+
+	// Reactions live one partition per message; fetch them concurrently and
+	// aggregate for the requester. Each goroutine writes its own slot, so no
+	// locking is needed beyond the per-index error collection.
+	requester, _ := userIDFrom(r.Context())
+	var wg sync.WaitGroup
+	errs := make([]error, len(recs))
+	for i := range recs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rows, err := s.reactions.ForMessage(r.Context(), channel.ID, recs[i].ID)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			out[i].Reactions = aggregateReactions(rows, requester)
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
+}
+
+// aggregateReactions folds raw reaction rows into per-emoji counts, preserving
+// first-seen order and flagging whether the requester reacted.
+func aggregateReactions(rows []store.ReactionRow, requester gocql.UUID) []models.Reaction {
+	out := make([]models.Reaction, 0, len(rows))
+	idx := make(map[string]int, len(rows))
+	for _, row := range rows {
+		i, ok := idx[row.Emoji]
+		if !ok {
+			i = len(out)
+			idx[row.Emoji] = i
+			out = append(out, models.Reaction{Emoji: row.Emoji})
+		}
+		out[i].Count++
+		if row.UserID == requester {
+			out[i].Me = true
+		}
+	}
+	return out
 }
 
 // maxAttachmentsPerMessage bounds how many files one message may reference.
@@ -73,18 +121,39 @@ const maxAttachmentsPerMessage = 10
 // not a relative path under this channel's own upload prefix. Without this a
 // caller could attach `javascript:…`, an off-origin URL, or another channel's
 // object and have the client render it — the message-create body is otherwise
-// trusted verbatim and broadcast to every member.
+// trusted verbatim and broadcast to every member. As an exception, a picked
+// GIF may be sent as an external attachment when it is an image/gif on an
+// allowlisted GIF host over https (§5, FEATURES-v2).
 func validateAttachments(channelID string, atts []models.Attachment) error {
 	if len(atts) > maxAttachmentsPerMessage {
 		return fmt.Errorf("at most %d attachments per message", maxAttachmentsPerMessage)
 	}
 	prefix := "/files/attachments/" + channelID + "/"
 	for _, a := range atts {
-		if !strings.HasPrefix(a.URL, prefix) || strings.Contains(a.URL, "..") {
-			return fmt.Errorf("invalid attachment url")
+		if strings.HasPrefix(a.URL, prefix) && !strings.Contains(a.URL, "..") {
+			continue
 		}
+		if a.ContentType == "image/gif" && isAllowedGifURL(a.URL) {
+			continue
+		}
+		return fmt.Errorf("invalid attachment url")
 	}
 	return nil
+}
+
+// isAllowedGifURL reports whether raw is an https URL on an allowlisted GIF CDN
+// host (Tenor or Giphy, apex excluded).
+func isAllowedGifURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" {
+		return false
+	}
+	host := u.Hostname()
+	switch host {
+	case "media.tenor.com", "c.tenor.com", "media.giphy.com":
+		return true
+	}
+	return strings.HasSuffix(host, ".tenor.com") || strings.HasSuffix(host, ".giphy.com")
 }
 
 func messageModel(channel store.ChannelRecord, m store.MessageRecord, author store.UserRecord) models.Message {
@@ -103,6 +172,7 @@ func messageModel(channel store.ChannelRecord, m store.MessageRecord, author sto
 		},
 		Content:     m.Content,
 		Attachments: attachments,
+		Reactions:   []models.Reaction{},
 		CreatedAt:   m.CreatedAt(),
 		EditedAt:    m.EditedAt,
 	}
@@ -323,6 +393,68 @@ func (s *Server) handleTyping(w http.ResponseWriter, r *http.Request) {
 	s.publishEvent(func() error {
 		return s.publisher.ToGuild(channel.GuildID.String(), events.TypeTypingStart, payload)
 	}, events.TypeTypingStart)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// reactionPayload is the wire shape for MESSAGE_REACTION_ADD/REMOVE events.
+func reactionPayload(channel store.ChannelRecord, messageID gocql.UUID, emoji string, uid gocql.UUID) map[string]string {
+	return map[string]string{
+		"channel_id": channel.ID.String(),
+		"message_id": messageID.String(),
+		"emoji":      emoji,
+		"user_id":    uid.String(),
+	}
+}
+
+func (s *Server) handleAddReaction(w http.ResponseWriter, r *http.Request) {
+	channel, _, uid, ok := s.channelContext(w, r)
+	if !ok {
+		return
+	}
+	emoji := chi.URLParam(r, "emoji")
+	if err := ValidateEmoji(emoji); err != nil {
+		writeError(w, http.StatusBadRequest, CodeValidationFailed, err.Error())
+		return
+	}
+	msg, ok := s.loadMessage(w, r, channel)
+	if !ok {
+		return
+	}
+	if err := s.reactions.Add(r.Context(), channel.ID, msg.ID, emoji, uid); err != nil {
+		writeStoreError(w, s.logger, err, "message not found")
+		return
+	}
+	payload := reactionPayload(channel, msg.ID, emoji, uid)
+	s.publishEvent(func() error {
+		return s.publisher.ToGuild(channel.GuildID.String(), events.TypeMessageReactionAdd, payload)
+	}, events.TypeMessageReactionAdd)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleRemoveReaction(w http.ResponseWriter, r *http.Request) {
+	channel, _, uid, ok := s.channelContext(w, r)
+	if !ok {
+		return
+	}
+	emoji := chi.URLParam(r, "emoji")
+	if err := ValidateEmoji(emoji); err != nil {
+		writeError(w, http.StatusBadRequest, CodeValidationFailed, err.Error())
+		return
+	}
+	msg, ok := s.loadMessage(w, r, channel)
+	if !ok {
+		return
+	}
+	if err := s.reactions.Remove(r.Context(), channel.ID, msg.ID, emoji, uid); err != nil {
+		writeStoreError(w, s.logger, err, "message not found")
+		return
+	}
+	payload := reactionPayload(channel, msg.ID, emoji, uid)
+	s.publishEvent(func() error {
+		return s.publisher.ToGuild(channel.GuildID.String(), events.TypeMessageReactionRemove, payload)
+	}, events.TypeMessageReactionRemove)
 
 	w.WriteHeader(http.StatusNoContent)
 }

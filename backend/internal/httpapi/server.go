@@ -30,6 +30,7 @@ type Server struct {
 	guilds    *store.Guilds
 	channels  *store.Channels
 	messages  *store.Messages
+	reactions *store.Reactions
 	invites   *store.Invites
 	userCache *store.UserCache
 
@@ -52,6 +53,7 @@ type Deps struct {
 	Guilds    *store.Guilds
 	Channels  *store.Channels
 	Messages  *store.Messages
+	Reactions *store.Reactions
 	Invites   *store.Invites
 	UserCache *store.UserCache
 	Presence  *presence.Tracker
@@ -74,6 +76,7 @@ func NewServer(d Deps) *Server {
 		guilds:    d.Guilds,
 		channels:  d.Channels,
 		messages:  d.Messages,
+		reactions: d.Reactions,
 		invites:   d.Invites,
 		userCache: d.UserCache,
 
@@ -112,6 +115,10 @@ func (s *Server) Router() http.Handler {
 			r.Patch("/users/@me", s.handlePatchMe)
 			r.Post("/users/@me/avatar", s.handleUploadAvatar)
 			r.Get("/users/@me/guilds", s.handleMyGuilds)
+			r.Get("/users/{user_id}", s.handleGetUser)
+
+			r.Get("/gifs/trending", s.handleGifsTrending)
+			r.Get("/gifs/search", s.handleGifsSearch)
 
 			r.Post("/guilds", s.handleCreateGuild)
 			r.Get("/guilds/{guild_id}", s.handleGetGuild)
@@ -126,7 +133,10 @@ func (s *Server) Router() http.Handler {
 			r.Post("/channels/{channel_id}/messages", s.handleCreateMessage)
 			r.Patch("/channels/{channel_id}/messages/{message_id}", s.handleEditMessage)
 			r.Delete("/channels/{channel_id}/messages/{message_id}", s.handleDeleteMessage)
+			r.Put("/channels/{channel_id}/messages/{message_id}/reactions/{emoji}", s.handleAddReaction)
+			r.Delete("/channels/{channel_id}/messages/{message_id}/reactions/{emoji}", s.handleRemoveReaction)
 			r.Post("/channels/{channel_id}/typing", s.handleTyping)
+			r.Post("/channels/{channel_id}/effects", s.handleEffect)
 			r.Post("/channels/{channel_id}/attachments", s.handleUploadAttachment)
 			r.Post("/channels/{channel_id}/voice/token", s.handleVoiceToken)
 		})
