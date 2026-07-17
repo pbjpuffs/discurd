@@ -1,0 +1,43 @@
+# Production overlay. Used on top of docker-compose.yml on the server:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
+#
+# It (1) runs the prebuilt GHCR images instead of building from source, and
+# (2) puts Traefik on HTTPS. With no ACME cert configured Traefik serves its
+# built-in self-signed certificate, which is enough to make the origin a
+# "secure context" so the browser will grant camera/mic (getUserMedia) — users
+# accept a one-time warning. Assign a domain later and switch to ACME for a
+# trusted cert (see docs/DEPLOYMENT.md). Everything else (secrets, ENV=production,
+# LIVEKIT_NODE_IP) comes from the server's .env, which the deploy workflow writes.
+
+name: discurd
+
+services:
+  traefik:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      # Redirect all plain HTTP to HTTPS so users land on the secure origin.
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls=true
+      - --entrypoints.metrics.address=:8082
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entrypoint=metrics
+      - --ping=true
+    ports:
+      - "443:443"
+
+  api:
+    image: ghcr.io/pbjpuffs/discurd-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+
+  gateway:
+    image: ghcr.io/pbjpuffs/discurd-gateway:${IMAGE_TAG:-latest}
+    pull_policy: always
+
+  web:
+    image: ghcr.io/pbjpuffs/discurd-web:${IMAGE_TAG:-latest}
+    pull_policy: always
