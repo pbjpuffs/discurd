@@ -33,17 +33,35 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rec.Model())
 }
 
+// handleGetUser returns another user's public profile (no email).
+func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUIDParam(w, r, "user_id")
+	if !ok {
+		return
+	}
+	rec, err := s.users.GetByID(r.Context(), id)
+	if err != nil {
+		writeStoreError(w, s.logger, err, "user not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, rec.Model().Public())
+}
+
 func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 	rec, ok := s.currentUser(w, r)
 	if !ok {
 		return
 	}
 	var req struct {
-		Username *string `json:"username"`
+		Username    *string `json:"username"`
+		Bio         *string `json:"bio"`
+		AccentColor *string `json:"accent_color"`
+		Pronouns    *string `json:"pronouns"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+
 	if req.Username != nil && *req.Username != rec.Username {
 		if err := ValidateUsername(*req.Username); err != nil {
 			writeError(w, http.StatusBadRequest, CodeValidationFailed, err.Error())
@@ -56,6 +74,40 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 		rec.Username = *req.Username
 		s.userCache.Invalidate(rec.ID)
 	}
+
+	// Profile fields update together in one row write; only touched when at
+	// least one is present, merging the rest from the current record.
+	if req.Bio != nil || req.AccentColor != nil || req.Pronouns != nil {
+		bio, accent, pronouns := rec.Bio, rec.AccentColor, rec.Pronouns
+		if req.Bio != nil {
+			if err := ValidateBio(*req.Bio); err != nil {
+				writeError(w, http.StatusBadRequest, CodeValidationFailed, err.Error())
+				return
+			}
+			bio = *req.Bio
+		}
+		if req.AccentColor != nil {
+			if err := ValidateAccentColor(*req.AccentColor); err != nil {
+				writeError(w, http.StatusBadRequest, CodeValidationFailed, err.Error())
+				return
+			}
+			accent = *req.AccentColor
+		}
+		if req.Pronouns != nil {
+			if err := ValidatePronouns(*req.Pronouns); err != nil {
+				writeError(w, http.StatusBadRequest, CodeValidationFailed, err.Error())
+				return
+			}
+			pronouns = *req.Pronouns
+		}
+		if err := s.users.UpdateProfile(r.Context(), rec.ID, bio, accent, pronouns); err != nil {
+			writeStoreError(w, s.logger, err, "user not found")
+			return
+		}
+		rec.Bio, rec.AccentColor, rec.Pronouns = bio, accent, pronouns
+		s.userCache.Invalidate(rec.ID)
+	}
+
 	writeJSON(w, http.StatusOK, rec.Model())
 }
 

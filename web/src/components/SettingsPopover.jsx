@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useChatStore } from '../store/chatStore'
+import { useEffectsStore } from '../store/effectsStore'
 import { api, ensureFreshAccessToken } from '../lib/api'
 import { disconnectGateway } from '../lib/gateway'
 import { toast } from '../store/toastStore'
@@ -12,6 +13,8 @@ export default function SettingsPopover() {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const clearSession = useAuthStore((s) => s.clearSession)
+  const stormMode = useEffectsStore((s) => s.stormMode)
+  const toggleStorm = useEffectsStore((s) => s.toggleStorm)
   const [username, setUsername] = useState(user.username)
   const [preview, setPreview] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -97,6 +100,19 @@ export default function SettingsPopover() {
       <button className="btn primary full" onClick={saveUsername} disabled={!usernameValid || !usernameChanged || saving}>
         {saving ? 'Saving…' : 'Save Username'}
       </button>
+      <div className="settings-divider" />
+      <label className="storm-toggle settings-storm">
+        <span>Storm Mode</span>
+        <button
+          type="button"
+          className={`switch ${stormMode ? 'on' : ''}`}
+          role="switch"
+          aria-checked={stormMode}
+          onClick={toggleStorm}
+        >
+          <span className="switch-knob" />
+        </button>
+      </label>
       <div className="settings-divider" />
       <button className="btn danger full" onClick={logout}>
         Log Out

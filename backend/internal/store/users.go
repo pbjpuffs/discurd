@@ -17,13 +17,18 @@ var (
 	ErrConflict = errors.New("already exists")
 )
 
-// UserRecord is the storage-side user row, including the password hash.
+// UserRecord is the storage-side user row, including the password hash. The
+// nullable profile columns (bio, accent_color, pronouns) scan into empty
+// strings when unset.
 type UserRecord struct {
 	ID           gocql.UUID
 	Username     string
 	Email        string
 	PasswordHash string
 	AvatarURL    string
+	Bio          string
+	AccentColor  string
+	Pronouns     string
 	CreatedAt    time.Time
 }
 
@@ -31,11 +36,14 @@ type UserRecord struct {
 // for non-self users).
 func (u UserRecord) Model() models.User {
 	return models.User{
-		ID:        u.ID.String(),
-		Username:  u.Username,
-		Email:     u.Email,
-		AvatarURL: u.AvatarURL,
-		CreatedAt: u.CreatedAt.UTC(),
+		ID:          u.ID.String(),
+		Username:    u.Username,
+		Email:       u.Email,
+		AvatarURL:   u.AvatarURL,
+		Bio:         u.Bio,
+		AccentColor: u.AccentColor,
+		Pronouns:    u.Pronouns,
+		CreatedAt:   u.CreatedAt.UTC(),
 	}
 }
 
@@ -76,9 +84,9 @@ func (r *Users) Create(ctx context.Context, u UserRecord) error {
 	}
 
 	if err := r.s.Query(
-		`INSERT INTO users (user_id, username, email, password_hash, avatar_url, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		u.ID, u.Username, u.Email, u.PasswordHash, u.AvatarURL, u.CreatedAt,
+		`INSERT INTO users (user_id, username, email, password_hash, avatar_url, bio, accent_color, pronouns, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		u.ID, u.Username, u.Email, u.PasswordHash, u.AvatarURL, u.Bio, u.AccentColor, u.Pronouns, u.CreatedAt,
 	).WithContext(ctx).Exec(); err != nil {
 		// The final insert failed after both reservations succeeded; release
 		// them so the email/username are not permanently burned with no user
@@ -96,8 +104,8 @@ func (r *Users) GetByID(ctx context.Context, id gocql.UUID) (UserRecord, error) 
 	var u UserRecord
 	u.ID = id
 	err := r.s.Query(
-		`SELECT username, email, password_hash, avatar_url, created_at FROM users WHERE user_id = ?`, id,
-	).WithContext(ctx).Scan(&u.Username, &u.Email, &u.PasswordHash, &u.AvatarURL, &u.CreatedAt)
+		`SELECT username, email, password_hash, avatar_url, bio, accent_color, pronouns, created_at FROM users WHERE user_id = ?`, id,
+	).WithContext(ctx).Scan(&u.Username, &u.Email, &u.PasswordHash, &u.AvatarURL, &u.Bio, &u.AccentColor, &u.Pronouns, &u.CreatedAt)
 	if errors.Is(err, gocql.ErrNotFound) {
 		return u, ErrNotFound
 	}
@@ -125,11 +133,11 @@ func (r *Users) GetByIDs(ctx context.Context, ids []gocql.UUID) (map[gocql.UUID]
 		return out, nil
 	}
 	iter := r.s.Query(
-		`SELECT user_id, username, email, password_hash, avatar_url, created_at
+		`SELECT user_id, username, email, password_hash, avatar_url, bio, accent_color, pronouns, created_at
 		 FROM users WHERE user_id IN ?`, ids,
 	).WithContext(ctx).Iter()
 	var u UserRecord
-	for iter.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarURL, &u.CreatedAt) {
+	for iter.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarURL, &u.Bio, &u.AccentColor, &u.Pronouns, &u.CreatedAt) {
 		out[u.ID] = u
 	}
 	if err := iter.Close(); err != nil {
@@ -162,4 +170,13 @@ func (r *Users) UpdateUsername(ctx context.Context, id gocql.UUID, oldName, newN
 func (r *Users) UpdateAvatar(ctx context.Context, id gocql.UUID, url string) error {
 	return r.s.Query(`UPDATE users SET avatar_url = ? WHERE user_id = ?`, url, id).
 		WithContext(ctx).Exec()
+}
+
+// UpdateProfile sets a user's profile fields (bio, accent color, pronouns) in a
+// single update.
+func (r *Users) UpdateProfile(ctx context.Context, id gocql.UUID, bio, accent, pronouns string) error {
+	return r.s.Query(
+		`UPDATE users SET bio = ?, accent_color = ?, pronouns = ? WHERE user_id = ?`,
+		bio, accent, pronouns, id,
+	).WithContext(ctx).Exec()
 }

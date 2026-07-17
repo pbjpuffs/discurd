@@ -7,11 +7,14 @@ import "time"
 // User is the API user object. Email is serialized only when set — handlers
 // blank it for anyone other than the requesting user.
 type User struct {
-	ID        string    `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email,omitempty"`
-	AvatarURL string    `json:"avatar_url"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	Username    string    `json:"username"`
+	Email       string    `json:"email,omitempty"`
+	AvatarURL   string    `json:"avatar_url"`
+	Bio         string    `json:"bio"`
+	AccentColor string    `json:"accent_color"`
+	Pronouns    string    `json:"pronouns"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // Public returns a copy without the email field.
@@ -65,6 +68,14 @@ type MessageAuthor struct {
 	AvatarURL string `json:"avatar_url"`
 }
 
+// Reaction is an aggregated emoji reaction on a message. Me reports whether the
+// requesting user is among those who reacted with this emoji.
+type Reaction struct {
+	Emoji string `json:"emoji"`
+	Count int    `json:"count"`
+	Me    bool   `json:"me"`
+}
+
 // Message is the API message object. Author is hydrated by the API layer.
 type Message struct {
 	ID          string        `json:"id"` // timeuuid
@@ -73,8 +84,18 @@ type Message struct {
 	Author      MessageAuthor `json:"author"`
 	Content     string        `json:"content"`
 	Attachments []Attachment  `json:"attachments"`
+	Reactions   []Reaction    `json:"reactions"` // always non-nil; [] when none
 	CreatedAt   time.Time     `json:"created_at"`
 	EditedAt    *time.Time    `json:"edited_at"` // null when never edited
+}
+
+// GifResult is a single GIF returned by the Tenor proxy (docs/FEATURES-v2.md §3).
+type GifResult struct {
+	ID      string `json:"id"`
+	URL     string `json:"url"`
+	Preview string `json:"preview"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
 }
 
 // Invite is the API invite object.

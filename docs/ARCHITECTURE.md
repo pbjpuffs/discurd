@@ -144,6 +144,9 @@ Envelope (JSON): `{"t": "<EVENT_TYPE>", "guild_id": "<uuid or empty>", "d": { ..
 | `GUILD_MEMBER_ADD` | guild | Member object plus `guild_id` |
 | `PRESENCE_UPDATE` | guild | `{user_id, guild_id, status: "online"\|"offline"}` |
 | `GUILD_CREATE` | user | full Guild object (sent to a user who created/joined a guild) |
+| `MESSAGE_REACTION_ADD` | guild | `{channel_id, message_id, emoji, user_id}` (see docs/FEATURES-v2.md) |
+| `MESSAGE_REACTION_REMOVE` | guild | `{channel_id, message_id, emoji, user_id}` |
+| `EFFECT` | guild | `{channel_id, guild_id, type, user_id}` — broadcast visual effect (lightning etc.) |
 
 The gateway subscribes to `discurd.events.>`. For guild events it dispatches to sessions
 whose user is a member of `guild_id` (each session caches its user's guild-id set at
@@ -281,6 +284,9 @@ Let's Encrypt once a domain is assigned). See docs/DEPLOYMENT.md.
 | `LIVEKIT_API_SECRET` | — (≥32 chars) | api |
 | `LIVEKIT_WS_URL` | `ws://localhost/livekit` | api (hint returned to clients; the web app derives its own from `window.location`) |
 | `LIVEKIT_NODE_IP` | `127.0.0.1` | compose-level — the IP LiveKit advertises in ICE candidates (set to the server's public IP on deploy) |
+| `GIPHY_API_KEY` | `` (empty) | api — enables the GIF picker (preferred; key from developers.giphy.com) |
+| `TENOR_API_KEY` | `` (empty) | api — GIF fallback (Tenor, Google-Cloud-gated key) |
+| `TENOR_CLIENT_KEY` | `discurd` | api |
 | `JWT_SECRET` | — (required) | both |
 | `ACCESS_TOKEN_TTL` | `15m` | api |
 | `REFRESH_TOKEN_TTL` | `168h` | api |

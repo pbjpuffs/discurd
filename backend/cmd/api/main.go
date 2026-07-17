@@ -102,6 +102,7 @@ func main() {
 		Guilds:    store.NewGuilds(session),
 		Channels:  store.NewChannels(session),
 		Messages:  store.NewMessages(session),
+		Reactions: store.NewReactions(session),
 		Invites:   store.NewInvites(session),
 		UserCache: store.NewUserCache(users, 30*time.Second),
 		Presence:  presence.NewTracker(rdb),

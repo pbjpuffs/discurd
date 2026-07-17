@@ -11,15 +11,18 @@ import (
 
 // Event type strings — the contract vocabulary.
 const (
-	TypeMessageCreate  = "MESSAGE_CREATE"
-	TypeMessageUpdate  = "MESSAGE_UPDATE"
-	TypeMessageDelete  = "MESSAGE_DELETE"
-	TypeTypingStart    = "TYPING_START"
-	TypeChannelCreate  = "CHANNEL_CREATE"
-	TypeGuildMemberAdd = "GUILD_MEMBER_ADD"
-	TypePresenceUpdate = "PRESENCE_UPDATE"
-	TypeGuildCreate    = "GUILD_CREATE"
-	TypeReady          = "READY"
+	TypeMessageCreate         = "MESSAGE_CREATE"
+	TypeMessageUpdate         = "MESSAGE_UPDATE"
+	TypeMessageDelete         = "MESSAGE_DELETE"
+	TypeMessageReactionAdd    = "MESSAGE_REACTION_ADD"
+	TypeMessageReactionRemove = "MESSAGE_REACTION_REMOVE"
+	TypeEffect                = "EFFECT"
+	TypeTypingStart           = "TYPING_START"
+	TypeChannelCreate         = "CHANNEL_CREATE"
+	TypeGuildMemberAdd        = "GUILD_MEMBER_ADD"
+	TypePresenceUpdate        = "PRESENCE_UPDATE"
+	TypeGuildCreate           = "GUILD_CREATE"
+	TypeReady                 = "READY"
 )
 
 // SubjectWildcard is what the gateway subscribes to.

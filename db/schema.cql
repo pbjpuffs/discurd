@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS users (
   email         text,
   password_hash text,
   avatar_url    text,
+  bio           text,
+  accent_color  text,
+  pronouns      text,
   created_at    timestamp
 );
 
@@ -92,6 +95,17 @@ CREATE TABLE IF NOT EXISTS messages (
   edited_at   timestamp,
   PRIMARY KEY ((channel_id, bucket), message_id)
 ) WITH CLUSTERING ORDER BY (message_id DESC);
+
+-- ---------- reactions ----------
+-- One partition per message; read all of a message's reactions in a single scan.
+CREATE TABLE IF NOT EXISTS reactions (
+  channel_id uuid,
+  message_id timeuuid,
+  emoji      text,
+  user_id    uuid,
+  created_at timestamp,
+  PRIMARY KEY ((channel_id, message_id), emoji, user_id)
+);
 
 -- ---------- invites ----------
 CREATE TABLE IF NOT EXISTS invites (

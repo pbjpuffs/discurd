@@ -208,6 +208,9 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-devsecret_change_me_please_0123456789abcdef}
       LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:-ws://localhost/livekit}
+      GIPHY_API_KEY: ${GIPHY_API_KEY:-}
+      TENOR_API_KEY: ${TENOR_API_KEY:-}
+      TENOR_CLIENT_KEY: ${TENOR_CLIENT_KEY:-discurd}
     depends_on:
       scylla-init:
         condition: service_completed_successfully

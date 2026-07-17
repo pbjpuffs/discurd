@@ -7,9 +7,19 @@ import (
 )
 
 var (
-	usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_]{2,32}$`)
-	emailRe    = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+	usernameRe    = regexp.MustCompile(`^[a-zA-Z0-9_]{2,32}$`)
+	emailRe       = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+	accentColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 )
+
+// effectTypes is the closed set of broadcast effect names (§3, FEATURES-v2).
+var effectTypes = map[string]bool{
+	"lightning": true,
+	"confetti":  true,
+	"hearts":    true,
+	"snow":      true,
+	"rain":      true,
+}
 
 // ValidateUsername enforces 2–32 chars of [a-zA-Z0-9_].
 func ValidateUsername(u string) error {
@@ -110,6 +120,52 @@ func ValidateMessageContent(content string, hasAttachments bool) error {
 	}
 	if l > 4000 {
 		return fmt.Errorf("message content must be at most 4000 characters")
+	}
+	return nil
+}
+
+// ValidateBio enforces bio ≤ 190 characters.
+func ValidateBio(b string) error {
+	if len([]rune(b)) > 190 {
+		return fmt.Errorf("bio must be at most 190 characters")
+	}
+	return nil
+}
+
+// ValidatePronouns enforces pronouns ≤ 40 characters.
+func ValidatePronouns(p string) error {
+	if len([]rune(p)) > 40 {
+		return fmt.Errorf("pronouns must be at most 40 characters")
+	}
+	return nil
+}
+
+// ValidateAccentColor accepts an empty value or a #RRGGBB hex color.
+func ValidateAccentColor(c string) error {
+	if c == "" {
+		return nil
+	}
+	if !accentColorRe.MatchString(c) {
+		return fmt.Errorf("accent_color must be a #RRGGBB hex color or empty")
+	}
+	return nil
+}
+
+// ValidateEmoji enforces a 1–32 rune reaction key that is not whitespace-only.
+func ValidateEmoji(e string) error {
+	if strings.TrimSpace(e) == "" {
+		return fmt.Errorf("emoji must not be blank")
+	}
+	if l := len([]rune(e)); l < 1 || l > 32 {
+		return fmt.Errorf("emoji must be 1-32 characters")
+	}
+	return nil
+}
+
+// ValidateEffectType enforces the closed effect-type enum.
+func ValidateEffectType(t string) error {
+	if !effectTypes[t] {
+		return fmt.Errorf("effect type must be one of lightning, confetti, hearts, snow, rain")
 	}
 	return nil
 }

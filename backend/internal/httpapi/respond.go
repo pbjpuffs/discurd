@@ -22,6 +22,7 @@ const (
 	CodeRateLimited        = "rate_limited"
 	CodeTooLarge           = "too_large"
 	CodeInternal           = "internal"
+	CodeGifsUnavailable    = "gifs_unavailable"
 )
 
 type errorBody struct {

@@ -33,6 +33,10 @@ type Config struct {
 	LiveKitAPISecret string
 	LiveKitWSURL     string
 
+	GiphyAPIKey    string
+	TenorAPIKey    string
+	TenorClientKey string
+
 	JWTSecret       string
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
@@ -59,6 +63,9 @@ func Load(defaultServiceName string) (*Config, error) {
 		LiveKitAPIKey:    getenv("LIVEKIT_API_KEY", "devkey"),
 		LiveKitAPISecret: getenv("LIVEKIT_API_SECRET", "devsecret_change_me_please_0123456789abcdef"),
 		LiveKitWSURL:     getenv("LIVEKIT_WS_URL", "ws://localhost/livekit"),
+		GiphyAPIKey:      getenv("GIPHY_API_KEY", ""),
+		TenorAPIKey:      getenv("TENOR_API_KEY", ""),
+		TenorClientKey:   getenv("TENOR_CLIENT_KEY", "discurd"),
 		JWTSecret:        os.Getenv("JWT_SECRET"),
 		LogLevel:         getenv("LOG_LEVEL", "info"),
 		CORSOrigins:      splitCSV(getenv("CORS_ORIGINS", "http://localhost:5173")),
